@@ -58,6 +58,18 @@ update(){
 
 		pause
 	;;
+	"RedHat"|"CentOS")
+		yum update -y
+		wait
+		yum upgrade -y
+		wait
+		yum update firefox -y
+		wait
+		yum install clamtk -y
+		wait
+
+		pause
+	;;
 	esac
 }
 
@@ -111,6 +123,10 @@ echo "$LogTime uss: [$UserName]# Setting auto updates." >> output.log
 		echo "###Important Security Updates###"
 		cat /etc/apt/sources.list
 		pause
+	;;
+	"RedHat"|"CentOS")
+
+		yum -y install yum-cron
 	;;
 	esac
 }
@@ -175,12 +191,35 @@ echo "$LogTime uss: [$UserName]# Firewall has been turned on and configured." >>
 		ufw status
 		pause
 	;;
+	"RedHat"|"CentOS")
+		yum install ufw
+echo "$LogTime uss: [$UserName]# Enabling firewall..." >> output.log
+                sudo ufw enable >>output.log
+                sudo ufw status >> output.log
+                sleep 1
+echo "$LogTime uss: [$UserName]# Firewall has been turned on and configured." >> output.log
+                ufw status
+                pause
+	;;
 	esac
 }
 
 ##Edits the /etc/gdm3 /etc/lightdm/lightdm.conf config files.
 loginConf() {
 	case "$opsys" in
+	"Debian") 
+		typeset -r TMOUT=900
+		sed -i 's/greeter-hide-users=.*/greeter-hide-users=true/' /etc/lightdm/lightdm.conf
+		sed -i 's/greeter-allow-guest=.*/greeter-allow-guest=false/' /etc/lightdm/lightdm.conf
+		sed -i 's/greeter-show-manual-login=.*/greeter-show-manual-login=true/' /etc/lightdm/lightdm.conf
+		sed -i 's/allow-guest=.*/allow-guest=false/' /etc/lightdm/lightdm.conf
+		sed -i 's/autologin-guest=.*/autologin-guest=false/' /etc/lightdm/lightdm.conf
+		sed -i 's/autologin-user=.*/autologin-user=NONE/' /etc/lightdm/lightdm.conf
+
+		sed -i 's/^# disable-user-.*/disable-user-list=true/' /etc/gdm3/greeter.dconf-defaults
+		sed -i 's/^# disable-restart-.*/disable-restart-buttons=true/' /etc/gdm3/greeter.dconf-defaults
+		sed -i 's/^#  AutomaticLoginEnable.*/AutomaticLoginEnable = false/' /etc/gdm3/custom.conf
+	;;
 	"Ubuntu")
 		typeset -r TMOUT=900
 echo "$LogTime uss: [$UserName]# Creating /etc/lightdm/lightdm.conf for 12.04 compatability." >> output.log
@@ -250,6 +289,21 @@ echo "$LogTime uss: [$UserName]# Lightdm files have been configured" >> output.l
 		cat /usr/share/lightdm/lightdm.conf.d/50-ubuntu.conf
 		pause
 		;;
+	"RedHat"|"CentOS")
+		typeset -r TMOUT=900
+		mkdir /etc/dconf/db/gdm.d
+		touch /etc/dconf/db/gdm.d/01-hide-users
+		sed -i '$a [org/gnome/login-screen]' /etc/dconf/db/gdm.d/01-hide-users
+		sed -i '$a banner-message-enable=true'/etc/dconf/db/gdm.d/01-hide-users
+		sed -i '$a banner-message-text="This is a restricted server xd."' /etc/dconf/db/gdm.d/01-hide-users
+		sed -i '$a disable-restart-buttons=true' /etc/dconf/db/gdm.d/01-hide-users
+		sed -i '$a disable-user-list=true' /etc/dconf/db/gdm.d/01-hide-users
+
+		touch /etc/dconf/profile/gdm
+		sed -i '$a user-db:user' /etc/dconf/profile/gdm
+		sed -i '$a system-db:gdm' /etc/dconf/profile/gdm
+		dconf update
+		;;
 	esac
 }
 
@@ -269,32 +323,25 @@ createUser() {
 
 ##Changes all the user passwords
 chgPasswd(){
-    LogTime=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "$LogTime uss: [$UserName]# Changing all user passwords except for the current user to Cyb3rPatr!0t$." >> output.log
+echo "$LogTime uss: [$UserName]# Changing all the user passwords to Cyb3rPatr!0t$." >> output.log
+	##Look for valid users that have different UID that not 1000+
+	cut -d: -f1,3 /etc/passwd | egrep ':[0-9]{4}$' | cut -d: -f1 > users
+	##Looks for users with the UID and GID of 0
+	hUSER=`cut -d: -f1,3 /etc/passwd | egrep ':[0]{1}$' | cut -d: -f1`
+	echo "$hUSER is a hidden user"
+	sed -i '/root/ d' users
 
-    # Extract users with UID >= 1000 (excluding system users and hidden accounts)
-    cut -d: -f1,3 /etc/passwd | awk -F: '$2 >= 1000 {print $1}' > users
+	PASS='Cyb3rPatr!0t$'
+	for x in `cat users`
+	do
+		echo -e "$PASS\n$PASS" | passwd $x >> output.log
+		echo -e "Password for $x has been changed."
+		##Changes the USER password policy
+		chage -M 90 -m 7 -W 15 $x
+	done
+echo "$LogTime uss: [$UserName]# Passwords have been changed." >> output.log
 
-    # Remove the currently logged-in user and root from the list
-    sed -i "/^$UserName\$/d" users
-    sed -i '/^root$/d' users
-
-    PASS='Cyb3rPatr!0t$'
-    
-    while read -r user; do
-        echo -e "$PASS\n$PASS" | passwd "$user" >> output.log 2>&1
-        echo "Password for $user has been changed."
-        
-        # Update password policy
-        chage -M 90 -m 7 -W 15 "$user"
-    done < users
-
-    echo "$LogTime uss: [$UserName]# Passwords have been changed." >> output.log
-    
-    # Clean up
-    rm -f users
-
-    pause
+	pause
 }
 
 ##Sets the password policy
@@ -842,7 +889,6 @@ CAD() {
 #VirtualCon() {
 	##Comment out every virtual terminal except tty1
 #}
-
 show_menu(){
 	case "$opsys" in
 	"Ubuntu")
